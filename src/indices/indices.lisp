@@ -369,8 +369,8 @@ the hash-table entry already contains a value, an error is thrown."
   (skip-list-get key (skip-list-index-skip-list index)))
 
 (defmethod index-remove ((index skip-list-index) object)
-  (skip-list-delete (slot-value object (skip-list-index-slot-name index))
-		    (skip-list-index-skip-list index)))
+  (skip-list-delete (skip-list-index-skip-list index)
+		     (slot-value object (skip-list-index-slot-name index))))
 
 (defmethod index-keys ((index skip-list-index))
   (let ((keys))

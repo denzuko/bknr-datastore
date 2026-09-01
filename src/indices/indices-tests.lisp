@@ -138,6 +138,19 @@
     (index-add *test-index* x)
     (test-equal (index-get *test-index* (copy-seq "urgent")) (list x))))
 
+;;; SKIP-LIST-INDEX had no test coverage at all before this either.
+;;; INDEX-REMOVE's own bug (calling SKIP-LIST-DELETE with SL and KEY
+;;; swapped relative to that function's real signature) would have
+;;; been caught immediately by a test this direct: no bknr.datastore
+;;; transaction machinery is involved, INDEX-REMOVE's method body
+;;; calls the wrong argument order unconditionally, on every call.
+
+(define-index-test skip-list-index-add ('skip-list-index :slots '(a))
+  (test-index-add))
+
+(define-index-test skip-list-index-remove ('skip-list-index :slots '(a))
+  (test-index-remove))
+
 (define-test-class indexed-class-test-class
     ((classes :initarg :classes)))
 
