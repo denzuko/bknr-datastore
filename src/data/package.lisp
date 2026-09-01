@@ -51,6 +51,8 @@
            #:store-object
            #:store-object-store
            #:store-object-id
+           #:datastore-lparallel-kernel
+           #:*datastore-lparallel-kernel*
            #:store-object-last-change
            #:store-object-touch
            #:print-store-object

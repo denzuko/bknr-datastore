@@ -14,6 +14,8 @@
                :unit-test
                :bknr.utils
                :bknr.indices
+               :lparallel
+               :bordeaux-threads
                :yason
                :trivial-utf-8
                #+sbcl :sb-posix)
