@@ -286,23 +286,5 @@
     (test-equal nil (parent-child parent))
     (test-equal nil (class-instances 'child))))
 
-(defdstest datastore-lparallel-kernel-is-safe-under-concurrent-first-call ()
-  ;; A real, found race condition, not a hypothetical one, mined
-  ;; from tdrhq/bknr-datastore's own use of a lock around the same
-  ;; check-then-set pattern. Without the lock, concurrent first calls
-  ;; to DATASTORE-LPARALLEL-KERNEL could each see the kernel variable
-  ;; as NIL and each create their own, leaking all but the one that
-  ;; wins the race. This launches many threads at once and confirms
-  ;; they all converge on exactly one kernel object.
-  (setf *datastore-lparallel-kernel* nil)
-  (let* ((n 50)
-         (results (make-array n))
-         (threads (loop for i from 0 below n
-                         collect (let ((idx i))
-                                   (bt:make-thread
-                                    (lambda () (setf (aref results idx) (datastore-lparallel-kernel))))))))
-    (mapc #'bt:join-thread threads)
-    (test-equal 1 (length (remove-duplicates (coerce results 'list))))))
-
 (defun run-datastore-test (name)
   (unit-test:run-test (gethash name *tests*)))

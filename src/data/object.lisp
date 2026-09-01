@@ -10,33 +10,6 @@
 
 (in-package :bknr.datastore)
 
-(defvar *datastore-lparallel-kernel* nil
-  "A dedicated lparallel kernel, not the shared/global lparallel:*kernel*,
-to avoid deadlock if a shared kernel is also trying to write to
-bknr.datastore. Not yet used by anything in this fork: this is the
-scoped-down, proven piece of a larger multi-threaded batched
-snapshot pipeline mined from tdrhq/bknr-datastore, ported here on
-its own because it is additive and already validated
-under real concurrent load (the same pattern, already fixing a real
-bug, in denzuko/bknr.hashkv's own ENSURE-KERNEL). The rest of that
-pipeline (batched, multi-threaded, multi-file snapshot writing) is
-tracked separately: https://github.com/denzuko/bknr-datastore/issues/2")
-
-(defvar *datastore-lparallel-kernel-lock* (bt:make-lock)
-  "Guards *DATASTORE-LPARALLEL-KERNEL*'s lazy initialization. Without
-this, concurrent first calls to DATASTORE-LPARALLEL-KERNEL could
-each see the kernel variable as NIL and each create their own,
-leaking all but the one that wins the race.")
-
-(defun datastore-lparallel-kernel ()
-  "Lazily initializes and returns the dedicated datastore lparallel
-kernel. Locked, not a plain check-then-set, for the reason
-documented on *DATASTORE-LPARALLEL-KERNEL-LOCK*."
-  (bt:with-lock-held (*datastore-lparallel-kernel-lock*)
-    (or *datastore-lparallel-kernel*
-        (setf *datastore-lparallel-kernel*
-              (lparallel:make-kernel 20 :name "bknr.datastore-lparallel-kernel")))))
-
 (define-condition inconsistent-slot-persistence-definition (store-error)
   ((class :initarg :class)
    (slot-name :initarg :slot-name))
