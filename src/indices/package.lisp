@@ -24,6 +24,7 @@
 	   #:string-unique-index
 	   #:hash-index
 	   #:hash-list-index
+	   #:string-hash-list-index
 	   #:array-index
 	   #:class-index
 	   #:skip-list-index

@@ -103,6 +103,41 @@
   (index-mapvalues *test-index* #'(lambda (obj) (index-remove *test-index* obj)))
   (test-equal (index-values *test-index*) nil))
 
+;;; HASH-LIST-INDEX had no test coverage at all before this: one
+;;; object can carry several keys, and several objects can share one
+;;; key, unlike UNIQUE-INDEX above.
+
+(define-index-test hash-list-index-add ('hash-list-index :slots '(a))
+  (let ((x (make-instance 'indexed-object :a '(3 4) :b 1 :c 1 :d 1))
+	(y (make-instance 'indexed-object :a '(4 5) :b 2 :c 2 :d 2)))
+    (index-add *test-index* x)
+    (index-add *test-index* y)
+    (test-equal (index-get *test-index* 3) (list x))
+    (test-equal (length (index-get *test-index* 4)) 2)
+    (test-equal (index-get *test-index* 5) (list y))))
+
+(define-index-test hash-list-index-remove ('hash-list-index :slots '(a))
+  (let ((x (make-instance 'indexed-object :a '(3 4) :b 1 :c 1 :d 1))
+	(y (make-instance 'indexed-object :a '(4 5) :b 2 :c 2 :d 2)))
+    (index-add *test-index* x)
+    (index-add *test-index* y)
+    (index-remove *test-index* x)
+    (test-equal (index-get *test-index* 3) nil)
+    (test-equal (index-get *test-index* 4) (list y))
+    (test-equal (index-get *test-index* 5) (list y))))
+
+;;; STRING-HASH-LIST-INDEX exists because HASH-LIST-INDEX's default
+;;; EQL hash-table test only matches identical string objects, not
+;;; equal string content: a string deserialized fresh after a
+;;; restart is never EQL to the string that indexed it originally.
+;;; UNIQUE-INDEX-STRESS above proves nothing about this, since its
+;;; keys are integers throughout.
+
+(define-index-test string-hash-list-index-matches-equal-strings ('string-hash-list-index :slots '(a))
+  (let ((x (make-instance 'indexed-object :a (list (copy-seq "urgent")) :b 1 :c 1 :d 1)))
+    (index-add *test-index* x)
+    (test-equal (index-get *test-index* (copy-seq "urgent")) (list x))))
+
 (define-test-class indexed-class-test-class
     ((classes :initarg :classes)))
 

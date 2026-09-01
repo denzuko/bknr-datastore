@@ -223,6 +223,20 @@ the hash-table entry already contains a value, an error is signalled."
 	    (remhash key hash-table)
 	    (setf (gethash key hash-table) new-value))))))
 
+(defclass string-hash-list-index (hash-list-index)
+  ()
+  (:documentation "HASH-LIST-INDEX defaults to an EQL hash-table
+test, which only matches identical string objects, not equal string
+content: a string deserialized fresh after a restart is never EQL to
+the string that indexed it originally, even with identical
+characters. This class exists for the same reason STRING-UNIQUE-INDEX
+exists for UNIQUE-INDEX, closing the same gap for HASH-LIST-INDEX,
+which had no equivalent."))
+
+(defmethod initialize-instance :after ((index string-hash-list-index) &key (test #'equal))
+  (with-slots (hash-table) index
+    (setf hash-table (make-hash-table :test test #+sbcl #+sbcl :synchronized t))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Multiple-slots array index
 
