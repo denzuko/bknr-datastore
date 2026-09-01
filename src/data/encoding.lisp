@@ -353,25 +353,48 @@
 (defun %decode-char (stream)
   (%read-char stream))
 
+(defun octets-to-string-safe (octets) ; safe and portable
+  (let ((flexi-streams:*substitution-char* #\?))
+    (handler-case
+        (flexi-streams:octets-to-string octets :external-format :utf-8)
+      (flexi-streams:external-format-condition (e)
+        (declare (ignore e))
+        (let ((string (flexi-streams:octets-to-string octets :external-format :ascii)))
+          (warn "could not decode string ~S as utf-8, decoded as ASCII" string)
+          string)))))
+
+(defun octets-to-string (octets)
+  (handler-case
+      (trivial-utf-8:utf-8-bytes-to-string octets)
+    (trivial-utf-8:utf-8-decoding-error ()
+      (octets-to-string-safe octets))))
+
+(defvar *max-string-decoding-cache-size* 100000000
+  "OCTETS-TO-STRING-DEDUPED clears *STRING-DECODING-CACHE* once it
+reaches this many entries, rather than growing it without bound.")
+
+(defvar *string-decoding-cache* (make-hash-table :test #'equalp)
+  "Maps decoded-string octets to the already-decoded string, so
+%DECODE-STRING returns the same string object for repeated byte
+sequences instead of reallocating one every time. A common pattern
+in a store with many objects sharing the same string values (a tag,
+a status), not something every decode needs, so this stays a plain
+cache keyed by content rather than a change to OCTETS-TO-STRING
+itself, which callers that do not want deduplication can still call
+directly.")
+
+(defun octets-to-string-deduped (octets)
+  (when (>= (hash-table-count *string-decoding-cache*) *max-string-decoding-cache-size*)
+    (clrhash *string-decoding-cache*))
+  (or (gethash octets *string-decoding-cache*)
+      (setf (gethash octets *string-decoding-cache*)
+            (octets-to-string octets))))
+
 (defun %decode-string (stream)
-  (labels ((octets-to-string-safe (octets) ; safe and portable
-             (let ((flexi-streams:*substitution-char* #\?))
-               (handler-case
-                   (flexi-streams:octets-to-string octets :external-format :utf-8)
-                 (flexi-streams:external-format-condition (e)
-                   (declare (ignore e))
-                   (let ((string (flexi-streams:octets-to-string octets :external-format :ascii)))
-                     (warn "could not decode string ~S as utf-8, decoded as ASCII" string)
-                     string)))))
-           (octets-to-string (octets)
-             (handler-case
-                 (trivial-utf-8:utf-8-bytes-to-string octets)
-               (trivial-utf-8:utf-8-decoding-error ()
-                 (octets-to-string-safe octets)))))
-    (let* ((n (%decode-integer stream))
-           (buffer (make-array n :element-type '(unsigned-byte 8))))
-      (assert (= n (read-sequence buffer stream)))
-      (octets-to-string buffer))))
+  (let* ((n (%decode-integer stream))
+         (buffer (make-array n :element-type '(unsigned-byte 8))))
+    (assert (= n (read-sequence buffer stream)))
+    (octets-to-string-deduped buffer)))
 
 (defun find-symbol-in-all-packages (name)
   (let (symbols)

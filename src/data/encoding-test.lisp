@@ -51,6 +51,20 @@
 (test-encoding list.len.3000 (loop repeat 3000 collect 'x))
 (test-encoding improper-list.1 '(1 2 3 4 . 5))
 
+;;; A standalone test, not using TEST-ENCODING: that macro goes
+;;; through BKNR.UTILS:WITH-TEMPORARY-FILE, which fails in this
+;;; environment for reasons unrelated to string decoding (confirmed
+;;; by running the whole suite against the unmodified source before
+;;; this change: the same failures occur either way). This tests
+;;; OCTETS-TO-STRING-DEDUPED directly instead, avoiding that path.
+
+(5am:test string-decoding-is-deduplicated
+  (let ((s1 (copy-seq "duplicate-me"))
+        (s2 (copy-seq "duplicate-me")))
+    (5am:is (not (eq s1 s2)))
+    (5am:is (eq (octets-to-string-deduped (flexi-streams:string-to-octets s1))
+                (octets-to-string-deduped (flexi-streams:string-to-octets s2))))))
+
 (test-encoding cons.1 '(1 . 2))
 
 ;;; from cl-store :)
