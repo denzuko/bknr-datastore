@@ -13,7 +13,8 @@
                :md5
                :flexi-streams
                :alexandria
-               :bordeaux-threads)
+               :bordeaux-threads
+               :lparallel)
   :components ((:module "statistics"
                 :components
                 ((:file "package")
@@ -22,6 +23,7 @@
                 :components
                 ((:file "package")
                  (:file "utils" :depends-on ("package"))
+                 (:file "parallel" :depends-on ("package"))
                  (:file "class" :depends-on ("package" "utils"))
                  #+(or cmu allegro openmcl sbcl)
                  (:file "smbpasswd" :depends-on ("utils"))

@@ -14,6 +14,9 @@
 
            ;; byte size formatting
            #:scale-bytes
+
+           ;; parallel work
+           #:ensure-dedicated-lparallel-kernel
    
            ;; date format
            #:format-date-time
