@@ -34,5 +34,14 @@
                  (:file "make-fdf-file" :depends-on ("utils"))
                  (:file "date-calc")
                  (:file "parse-time")
-                 (:file "acl-mp-compat" :depends-on ("package"))))))
+                 (:file "acl-mp-compat" :depends-on ("package")))))
+  :in-order-to ((test-op (test-op :bknr.utils/test))))
+
+(defsystem :bknr.utils/test
+  :depends-on (:bknr.utils :fiveam)
+  :components ((:module "utils"
+                :components
+                ((:file "parallel-test"))))
+  :perform (test-op (o c)
+             (symbol-call :fiveam :run! :bknr.utils)))
 
