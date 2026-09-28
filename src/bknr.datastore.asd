@@ -36,3 +36,11 @@
                  (:file "object-tests"))))
   :perform (test-op (o c)
              (symbol-call :fiveam :run! :bknr.datastore)))
+
+(defsystem :bknr.datastore/bdd
+  :description "Gherkin features for bknr.datastore, run through sunny-side."
+  :depends-on (:bknr.datastore :sunny-side :fiveam :bordeaux-threads :uiop)
+  :pathname "../features/step_definitions/"
+  :components ((:file "transaction-rollback-steps"))
+  :perform (test-op (o c)
+             (symbol-call :bknr.datastore.bdd :run-bdd)))
