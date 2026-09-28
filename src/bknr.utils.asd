@@ -41,7 +41,8 @@
   :depends-on (:bknr.utils :fiveam)
   :components ((:module "utils"
                 :components
-                ((:file "parallel-test"))))
+                ((:file "parallel-test")
+                 (:file "utils-test" :depends-on ("parallel-test")))))
   :perform (test-op (o c)
              (symbol-call :fiveam :run! :bknr.utils)))
 
