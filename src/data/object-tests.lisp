@@ -302,7 +302,7 @@
     (test-equal (list live) (class-instances 'keyed-thing))))
 
 (defun id-counter ()
-  "Returns the store's next object id."
+  "Return the store's next object id."
   (bknr.datastore::next-object-id (store-object-subsystem)))
 
 (defdstest failed-transaction-removes-every-object-it-created ()
@@ -330,7 +330,7 @@
        :unit :datastore
        :name 'failed-rollback-does-not-hand-out-ids-still-held
        ;; Not DEFDSTEST: after a failed undo the live store and the log
-       ;; differ by design, so DO-RUN-TEST's restore comparison does not
+       ;; differ, so DO-RUN-TEST's restore comparison does not
        ;; apply. When the undo itself fails, objects the transaction
        ;; created keep their ids. Ids stay unique (tutorial, object store
        ;; section), so the counter must not return to those ids.
@@ -352,8 +352,8 @@
                    (test-equal next (store-object-with-id (store-object-id next))))))))
 
 (defun run-in-threads (count function)
-  "Runs FUNCTION with each index below COUNT on its own thread, releases the
-threads together, and waits for all of them."
+  "Run FUNCTION with each index below COUNT on its own thread, release the
+threads together, and wait for all of them."
   (let* ((gate (bt:make-semaphore))
          (threads (loop for index below count
                         collect (let ((index index))
@@ -364,7 +364,7 @@ threads together, and waits for all of them."
     (mapc #'bt:join-thread threads)))
 
 (defun created-or-failed (index round)
-  "Even threads create a keyed thing outside any transaction; odd threads
+  "Create a keyed thing outside any transaction on even INDEX; on odd INDEX,
 create one inside an anonymous transaction that then fails. Errors are
 ignored here and show up as missing objects."
   (ignore-errors

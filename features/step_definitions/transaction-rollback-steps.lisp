@@ -23,32 +23,32 @@
   signalled live-ids live-counter)
 
 (defun scratch-directory ()
-  "Returns a new, unique directory under the system temporary directory."
+  "Return an unused directory under the system temporary directory."
   (ensure-directories-exist
    (uiop:ensure-directory-pathname
     (merge-pathnames (format nil "bknr-bdd-~36R~36R" (get-universal-time) (random (expt 36 8)))
                      (uiop:temporary-directory)))))
 
 (defun id-counter ()
-  "Returns the store's next object id."
+  "Return the store's next object id."
   (bknr.datastore::next-object-id (bknr.datastore::store-object-subsystem)))
 
 (defun things ()
-  "Returns every THING in the store."
+  "Return every THING in the store."
   (class-instances 'thing))
 
 (defun sorted-ids ()
-  "Returns the ids of every THING, ascending."
+  "Return the ids of every THING, ascending."
   (sort (mapcar #'store-object-id (things)) #'<))
 
-(defun signalled-by (thunk)
-  "Calls THUNK and returns the error it signals, or NIL."
-  (handler-case (progn (funcall thunk) nil)
+(defun signalled-by (function)
+  "Call FUNCTION and return the error it signals, or NIL."
+  (handler-case (progn (funcall function) nil)
     (error (condition) condition)))
 
 (defun run-in-threads (count function)
-  "Runs FUNCTION with each index below COUNT on its own thread, releases
-the threads together, and waits for all of them."
+  "Run FUNCTION with each index below COUNT on its own thread, release the
+threads together, and wait for all of them."
   (let* ((gate (bt:make-semaphore))
          (threads (loop for index below count
                         collect (let ((index index))
@@ -64,8 +64,9 @@ the threads together, and waits for all of them."
        (eq thing (store-object-with-id (store-object-id thing)))))
 
 (defun create-or-fail (index round)
-  "Even threads create a thing outside any transaction; odd threads create
-one inside a transaction that then signals. Errors surface as missing things."
+  "Create a thing outside any transaction on even INDEX; on odd INDEX,
+create one inside a transaction that then signals. Errors surface as
+missing things."
   (ignore-errors
     (cond ((evenp index)
            (make-instance 'thing :key (format nil "made-~D-~D" index round)))
@@ -181,7 +182,7 @@ one inside a transaction that then signals. Errors surface as missing things."
   :suite transaction-rollback-suite)
 
 (defun run-bdd ()
-  "Runs the rollback feature, closes the store the last scenario opened,
-and returns T when every scenario passed."
+  "Run the rollback feature, close the store the last scenario opened,
+and return T when every scenario passed."
   (unwind-protect (fiveam:run! 'transaction-rollback-suite)
     (close-store)))
