@@ -286,5 +286,56 @@
     (test-equal nil (parent-child parent))
     (test-equal nil (class-instances 'child))))
 
+(define-persistent-class keyed-thing ()
+  ((key :read :initarg :key
+        :index-type string-unique-index
+        :index-reader keyed-thing-with-key)))
+
+(defdstest failed-duplicate-key-transaction-keeps-the-live-entry ()
+  ;; The rolled-back object shares its key with the live one; undoing
+  ;; its slot write must not remove the live object's index entry.
+  (let ((live (make-instance 'keyed-thing :key "k")))
+    (test-condition (with-transaction (:duplicate)
+                      (make-instance 'keyed-thing :key "k"))
+                    'index-existing-error)
+    (test-equal live (keyed-thing-with-key "k"))
+    (test-equal (list live) (class-instances 'keyed-thing))))
+
+(defun run-in-threads (count function)
+  "Runs FUNCTION with each index below COUNT on its own thread, releases the
+threads together, and waits for all of them."
+  (let* ((gate (bt:make-semaphore))
+         (threads (loop for index below count
+                        collect (let ((index index))
+                                  (bt:make-thread (lambda ()
+                                                    (bt:wait-on-semaphore gate)
+                                                    (funcall function index)))))))
+    (bt:signal-semaphore gate :count count)
+    (mapc #'bt:join-thread threads)))
+
+(defun created-or-failed (index round)
+  "Even threads create a keyed thing outside any transaction; odd threads
+create one inside an anonymous transaction that then fails. Errors are
+ignored here and show up as missing objects."
+  (ignore-errors
+    (cond ((evenp index)
+           (make-instance 'keyed-thing :key (format nil "~D-~D" index round)))
+          (t (with-transaction (:fails)
+               (make-instance 'keyed-thing :key (format nil "failed-~D-~D" index round))
+               (error "fail on purpose"))))))
+
+(defdstest failed-transactions-concurrent-with-creation-keep-ids-unique ()
+  ;; A failing anonymous transaction rewinds the object id counter. The
+  ;; rewind must never reach ids that other threads have allocated, or
+  ;; later objects replace them in the id index.
+  (run-in-threads 16 (lambda (index)
+                       (dotimes (round 40)
+                         (created-or-failed index round))))
+  (let ((things (class-instances 'keyed-thing)))
+    (test-equal (* 8 40) (length things))
+    (test-equal (length things) (length (remove-duplicates (mapcar #'store-object-id things))))
+    (test-assert (every (lambda (thing) (eq thing (store-object-with-id (store-object-id thing)))) things))
+    (test-assert (every (lambda (thing) (eq thing (keyed-thing-with-key (keyed-thing-key thing)))) things))))
+
 (defun run-datastore-test (name)
   (unit-test:run-test (gethash name *tests*)))
