@@ -181,5 +181,7 @@ one inside a transaction that then signals. Errors surface as missing things."
   :suite transaction-rollback-suite)
 
 (defun run-bdd ()
-  "Runs the rollback feature and returns T when every scenario passed."
-  (fiveam:run! 'transaction-rollback-suite))
+  "Runs the rollback feature, closes the store the last scenario opened,
+and returns T when every scenario passed."
+  (unwind-protect (fiveam:run! 'transaction-rollback-suite)
+    (close-store)))
