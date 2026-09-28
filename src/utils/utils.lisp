@@ -252,11 +252,17 @@ synchronously execute the result using a Bourne-compatible shell.
 		       (namestring file2)))
 
 (defun make-temporary-pathname (&key (defaults nil) (name "tmp"))
-  (loop for file = (make-pathname :name (format nil "~A-~A-~A"
-						name
-                                                (get-universal-time)
-                                                (random most-positive-fixnum))
-                                  :defaults defaults)
+  "Return a pathname that names no existing file, named NAME, the
+universal time and a random number joined by hyphens. DEFAULTS, a
+pathname designator, supplies the other components. When DEFAULTS is
+NIL it is not passed to MAKE-PATHNAME, whose own default then applies:
+only the host of *DEFAULT-PATHNAME-DEFAULTS* carries over."
+  (loop for file = (apply #'make-pathname
+                          :name (format nil "~A-~A-~A"
+                                        name
+                                        (get-universal-time)
+                                        (random most-positive-fixnum))
+                          (when defaults (list :defaults defaults)))
         while (probe-file file)
         finally (return file)))
 

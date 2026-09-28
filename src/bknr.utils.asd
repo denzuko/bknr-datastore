@@ -41,7 +41,16 @@
   :depends-on (:bknr.utils :fiveam)
   :components ((:module "utils"
                 :components
-                ((:file "parallel-test"))))
+                ((:file "parallel-test")
+                 (:file "utils-test" :depends-on ("parallel-test")))))
   :perform (test-op (o c)
              (symbol-call :fiveam :run! :bknr.utils)))
+
+(defsystem :bknr.utils/bdd
+  :description "Gherkin features for bknr.utils, run through sunny-side."
+  :depends-on (:bknr.utils :sunny-side :fiveam :bordeaux-threads)
+  :pathname "../features/step_definitions/"
+  :components ((:file "temporary-pathname-steps"))
+  :perform (test-op (o c)
+             (symbol-call :bknr.utils.bdd :run-bdd)))
 
