@@ -49,7 +49,14 @@ SLOT-NAME is used as a key to the internal hash-table.")
 		object slot-name)))))
 
 (defmethod index-remove ((index slot-index) object)
-  (remhash (slot-value object (slot-index-slot-name index)) (slot-index-hash-table index)))
+  "Remove OBJECT's entry. The entry under OBJECT's key is removed only
+when it maps to OBJECT itself, so removing an object whose key another
+object holds, such as one rolled back after a duplicate key, leaves
+the other object's entry in place."
+  (let ((key (slot-value object (slot-index-slot-name index)))
+        (hash-table (slot-index-hash-table index)))
+    (when (eq object (gethash key hash-table))
+      (remhash key hash-table))))
   
 (defmethod index-keys ((index slot-index))
   (loop for key being the hash-keys of (slot-index-hash-table index)

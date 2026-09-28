@@ -237,28 +237,36 @@ reads will return nil."))
 (aclmop::finalize-inheritance (find-class 'store-object))
 
 (defmethod initialize-instance :around ((object store-object) &rest initargs &key)
-  (setf (slot-value object 'id) (allocate-next-object-id))
-  (cond
-    ((not (in-transaction-p))
-     (with-store-guard ()
-       (let ((transaction (make-instance 'transaction
-                                         :function-symbol 'make-instance
-                                         :timestamp (get-universal-time)
-                                         :args (cons (class-name (class-of object))
-                                                     (append (list :id (slot-value object 'id))
-                                                             initargs)))))
-         (with-statistics-log (*transaction-statistics* (transaction-function-symbol transaction))
-           (with-transaction-log (transaction)
-             (call-next-method))))))
-    ((in-anonymous-transaction-p)
-     (encode (make-instance 'transaction
-                            :function-symbol 'make-instance
-                            :timestamp (transaction-timestamp *current-transaction*)
-                            :args (cons (class-name (class-of object)) initargs))
-             (anonymous-transaction-log-buffer *current-transaction*))
-     (call-next-method))
-    (t
-     (call-next-method))))
+  ;; Every id is allocated while the store guard is held: inside a
+  ;; transaction the guard is already held, and outside one the id is
+  ;; allocated after taking it. DO-WITH-TRANSACTION relies on this when
+  ;; it rewinds the id counter after a rollback.
+  (flet ((assign-id ()
+           (setf (slot-value object 'id) (allocate-next-object-id))))
+    (cond
+      ((not (in-transaction-p))
+       (with-store-guard ()
+         (assign-id)
+         (let ((transaction (make-instance 'transaction
+                                           :function-symbol 'make-instance
+                                           :timestamp (get-universal-time)
+                                           :args (cons (class-name (class-of object))
+                                                       (append (list :id (slot-value object 'id))
+                                                               initargs)))))
+           (with-statistics-log (*transaction-statistics* (transaction-function-symbol transaction))
+             (with-transaction-log (transaction)
+               (call-next-method))))))
+      ((in-anonymous-transaction-p)
+       (assign-id)
+       (encode (make-instance 'transaction
+                              :function-symbol 'make-instance
+                              :timestamp (transaction-timestamp *current-transaction*)
+                              :args (cons (class-name (class-of object)) initargs))
+               (anonymous-transaction-log-buffer *current-transaction*))
+       (call-next-method))
+      (t
+       (assign-id)
+       (call-next-method)))))
 
 (defvar *allocate-object-id-lock* (bt:make-lock "Persistent Object ID Creation"))
 
