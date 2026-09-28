@@ -81,6 +81,51 @@
 (define-index-test unique-index-remove2 ('unique-index :slots '(b))
   (test-index-remove))
 
+;;; INDEX-REMOVE removes OBJECT from the index (protocol.lisp). An object
+;;; whose key another object holds is not in the index, so removing it
+;;; leaves the other object's entry.
+
+(define-index-test unique-index-remove-non-holder-keeps-holder ('unique-index :slots '(a))
+  (let ((holder (make-instance 'indexed-object :a 3))
+        (other (make-instance 'indexed-object :a 3)))
+    (index-add *test-index* holder)
+    (index-remove *test-index* other)
+    (test-equal (index-get *test-index* 3) holder)
+    (test-equal (index-values *test-index*) (list holder))))
+
+(define-index-test unique-index-remove-absent-key-is-a-no-op ('unique-index :slots '(a))
+  (let ((holder (make-instance 'indexed-object :a 3))
+        (absent (make-instance 'indexed-object :a 4)))
+    (index-add *test-index* holder)
+    (index-remove *test-index* absent)
+    (test-equal (index-get *test-index* 3) holder)
+    (test-equal (index-get *test-index* 4) nil)))
+
+(define-index-test unique-index-remove-twice-is-a-no-op ('unique-index :slots '(a))
+  (let ((object (make-instance 'indexed-object :a 3)))
+    (index-add *test-index* object)
+    (index-remove *test-index* object)
+    (index-remove *test-index* object)
+    (test-equal (index-get *test-index* 3) nil)
+    (test-equal (index-values *test-index*) nil)))
+
+(define-index-test unique-index-remove-unbound-key-is-a-no-op ('unique-index :slots '(a))
+  (let ((holder (make-instance 'indexed-object :a 3))
+        (unbound (make-instance 'indexed-object)))
+    (index-add *test-index* holder)
+    (handler-bind ((warning #'muffle-warning))
+      (index-remove *test-index* unbound))
+    (test-equal (index-get *test-index* 3) holder)))
+
+(define-index-test string-unique-index-remove-non-holder-keeps-holder ('string-unique-index :slots '(a))
+  (let ((holder (make-instance 'indexed-object :a (copy-seq "k")))
+        (other (make-instance 'indexed-object :a (copy-seq "k"))))
+    (index-add *test-index* holder)
+    (index-remove *test-index* other)
+    (test-equal (index-get *test-index* "k") holder)
+    (index-remove *test-index* holder)
+    (test-equal (index-get *test-index* "k") nil)))
+
 (define-index-test unique-index-reinitialize ('unique-index :slots '(a))
   (let ((a-obj (make-instance 'indexed-object :a 3 :b 3 :c 3 :d 3)))
     (index-add *test-index* a-obj)

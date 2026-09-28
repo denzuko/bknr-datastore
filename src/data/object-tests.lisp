@@ -286,5 +286,106 @@
     (test-equal nil (parent-child parent))
     (test-equal nil (class-instances 'child))))
 
+(define-persistent-class keyed-thing ()
+  ((key :read :initarg :key
+        :index-type string-unique-index
+        :index-reader keyed-thing-with-key)))
+
+(defdstest failed-duplicate-key-transaction-keeps-the-live-entry ()
+  ;; The rolled-back object shares its key with the live one; undoing
+  ;; its slot write must not remove the live object's index entry.
+  (let ((live (make-instance 'keyed-thing :key "k")))
+    (test-condition (with-transaction (:duplicate)
+                      (make-instance 'keyed-thing :key "k"))
+                    'index-existing-error)
+    (test-equal live (keyed-thing-with-key "k"))
+    (test-equal (list live) (class-instances 'keyed-thing))))
+
+(defun id-counter ()
+  "Return the store's next object id."
+  (bknr.datastore::next-object-id (store-object-subsystem)))
+
+(defdstest failed-transaction-removes-every-object-it-created ()
+  ;; fc4e7be: undoing the id slot writes removes created objects from
+  ;; their indices; the counter returns to its value at the start.
+  (let ((counter (id-counter)))
+    (ignore-errors
+      (with-transaction (:fails)
+        (let ((parent (make-instance 'parent)))
+          (setf (parent-child parent) (make-instance 'child)))
+        (error "rollback on purpose")))
+    (test-equal nil (class-instances 'parent))
+    (test-equal nil (class-instances 'child))
+    (test-equal counter (id-counter))))
+
+(defdstest failed-transaction-without-creation-leaves-the-counter ()
+  (make-instance 'store-object)
+  (let ((counter (id-counter)))
+    (ignore-errors (with-transaction (:fails) (error "rollback on purpose")))
+    (test-equal counter (id-counter))))
+
+(setf (gethash 'failed-rollback-does-not-hand-out-ids-still-held *tests*)
+      (make-instance
+       'datastore-test-class
+       :unit :datastore
+       :name 'failed-rollback-does-not-hand-out-ids-still-held
+       ;; Not DEFDSTEST: after a failed undo the live store and the log
+       ;; differ, so DO-RUN-TEST's restore comparison does not
+       ;; apply. When the undo itself fails, objects the transaction
+       ;; created keep their ids. Ids stay unique (tutorial, object store
+       ;; section), so the counter must not return to those ids.
+       :body (lambda ()
+               (let ((condition
+                       (nth-value 1 (ignore-errors
+                                      (with-transaction (:undo-fails)
+                                        (make-instance 'keyed-thing :key "held")
+                                        (push (list (lambda () (error "undo fails on purpose")))
+                                              (bknr.datastore::anonymous-transaction-undo-log
+                                               bknr.datastore::*current-transaction*))
+                                        (error "rollback on purpose"))))))
+                 (test-assert (typep condition 'bknr.datastore::rollback-failed))
+                 (let ((held (keyed-thing-with-key "held"))
+                       (next (make-instance 'keyed-thing :key "next")))
+                   (test-assert held)
+                   (test-assert (/= (store-object-id held) (store-object-id next)))
+                   (test-equal held (store-object-with-id (store-object-id held)))
+                   (test-equal next (store-object-with-id (store-object-id next))))))))
+
+(defun run-in-threads (count function)
+  "Run FUNCTION with each index below COUNT on its own thread, release the
+threads together, and wait for all of them."
+  (let* ((gate (bt:make-semaphore))
+         (threads (loop for index below count
+                        collect (let ((index index))
+                                  (bt:make-thread (lambda ()
+                                                    (bt:wait-on-semaphore gate)
+                                                    (funcall function index)))))))
+    (bt:signal-semaphore gate :count count)
+    (mapc #'bt:join-thread threads)))
+
+(defun created-or-failed (index round)
+  "Create a keyed thing outside any transaction on even INDEX; on odd INDEX,
+create one inside an anonymous transaction that then fails. Errors are
+ignored here and show up as missing objects."
+  (ignore-errors
+    (cond ((evenp index)
+           (make-instance 'keyed-thing :key (format nil "~D-~D" index round)))
+          (t (with-transaction (:fails)
+               (make-instance 'keyed-thing :key (format nil "failed-~D-~D" index round))
+               (error "fail on purpose"))))))
+
+(defdstest failed-transactions-concurrent-with-creation-keep-ids-unique ()
+  ;; A failing anonymous transaction rewinds the object id counter. The
+  ;; rewind must never reach ids that other threads have allocated, or
+  ;; later objects replace them in the id index.
+  (run-in-threads 16 (lambda (index)
+                       (dotimes (round 40)
+                         (created-or-failed index round))))
+  (let ((things (class-instances 'keyed-thing)))
+    (test-equal (* 8 40) (length things))
+    (test-equal (length things) (length (remove-duplicates (mapcar #'store-object-id things))))
+    (test-assert (every (lambda (thing) (eq thing (store-object-with-id (store-object-id thing)))) things))
+    (test-assert (every (lambda (thing) (eq thing (keyed-thing-with-key (keyed-thing-key thing)))) things))))
+
 (defun run-datastore-test (name)
   (unit-test:run-test (gethash name *tests*)))

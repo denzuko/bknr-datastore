@@ -617,17 +617,25 @@ transaction, if any."
              :original-error e))))
 
 (defun do-with-transaction (label thunk)
+  "Run THUNK as an anonymous transaction. On error, undo its slot
+changes and rewind the object id counter to its value at the start of
+the transaction, so the ids of rolled-back objects are handed out again
+and object ids on replay match the ids of the live run. The counter is
+read inside the store guard and every id is allocated under the guard,
+so no other thread allocates ids between the read and the rewind. When
+the undo itself fails the counter is left as it is, since objects
+created by the transaction may still hold those ids."
   (when (in-transaction-p)
     (error 'anonymous-transaction-in-transaction))
-  (let ((txn (make-instance 'anonymous-transaction :label label))
-        (next-object-id (next-object-id (store-object-subsystem))))
+  (let ((txn (make-instance 'anonymous-transaction :label label)))
     (with-transaction-log (txn)
-      (handler-case
-          (funcall thunk)
-        (error (e)
-          (setf (next-object-id (store-object-subsystem)) next-object-id)
-          (anonymous-transaction-undo txn)
-          (error e))))))
+      (let ((next-object-id (next-object-id (store-object-subsystem))))
+        (handler-case
+            (funcall thunk)
+          (error (e)
+            (anonymous-transaction-undo txn)
+            (setf (next-object-id (store-object-subsystem)) next-object-id)
+            (error e)))))))
 
 (defmacro with-transaction ((&optional label) &body body)
   `(do-with-transaction ,(if (symbolp label) (symbol-name label) label)
