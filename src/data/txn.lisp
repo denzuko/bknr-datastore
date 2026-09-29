@@ -309,9 +309,18 @@ want to change the store permanently."
 
 (defvar *current-transaction* nil)
 
+(defvar *restoring-store* nil
+  "The store this thread is restoring. RESTORE-STORE binds it for the
+duration of the restore, so the restore counts as a transaction only in
+the thread running it. Never set globally.")
+
 (defun in-transaction-p ()
+  "True inside a transaction, and inside a restore in the thread that runs
+it. Other threads are outside any transaction while a restore runs."
   (or *current-transaction*
-      (eq :restore (store-state *store*))))
+      (and *restoring-store*
+           (eq *restoring-store* *store*)
+           (eq :restore (store-state *store*)))))
 
 (defun current-transaction-timestamp ()
   (transaction-timestamp *current-transaction*))
@@ -776,10 +785,13 @@ pathname until a non-existant directory name has been found."
 (defmethod restore-store ((store store) &key until)
   (ensure-store-random-state store)
   (report-progress "restoring ~A~%" store)
-  (let ((*store* store))
-    (setf (store-state store) :opened)
-    (with-store-state (:restore)
-      (with-store-guard ()
+  ;; The store state is shared by every thread, so it changes only while
+  ;; the guard is held; a thread waiting on the guard never sees :RESTORE.
+  (let ((*store* store)
+        (*restoring-store* store))
+    (with-store-guard ()
+      (setf (store-state store) :opened)
+      (with-store-state (:restore)
         (with-log-guard ()
           (close-transaction-log-stream store)
           (let ((transaction-log (store-transaction-log-pathname store))

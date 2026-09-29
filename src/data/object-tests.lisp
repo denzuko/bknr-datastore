@@ -351,6 +351,117 @@
                    (test-equal held (store-object-with-id (store-object-id held)))
                    (test-equal next (store-object-with-id (store-object-id next))))))))
 
+;;; A restore holds the store guard, and only the thread running it is inside
+;;; the restore (object.lisp contract: other threads are outside any
+;;; transaction). These tests pause a restore with a gate subsystem.
+
+(defclass restore-gate ()
+  ((entered :initform (bt:make-semaphore) :reader restore-gate-entered)
+   (release :initform (bt:make-semaphore) :reader restore-gate-release)
+   (armed :initform nil :accessor restore-gate-armed)
+   (in-transaction-inside :initform :unset :accessor restore-gate-in-transaction-inside))
+  (:documentation "Subsystem that, when armed, stops a restore inside
+RESTORE-SUBSYSTEM until released, and records IN-TRANSACTION-P there."))
+
+(defmethod restore-subsystem (store (gate restore-gate) &key until)
+  (declare (ignore store until))
+  (when (restore-gate-armed gate)
+    (setf (restore-gate-in-transaction-inside gate) (in-transaction-p))
+    (bt:signal-semaphore (restore-gate-entered gate))
+    (bt:wait-on-semaphore (restore-gate-release gate))))
+
+(defmethod snapshot-subsystem (store (gate restore-gate))
+  (declare (ignore store))
+  nil)
+
+(defun call-with-paused-restore (function &key (after (constantly nil)))
+  "Open a store with a keyed thing \"k\", snapshot it, and restore it in
+another thread, paused after the snapshot is loaded. Call FUNCTION with
+the gate and the restoring thread while the restore is paused, release
+the restore and wait for it, then call AFTER. Close the store last."
+  (let ((gate (make-instance 'restore-gate)))
+    (make-instance 'mp-store
+                   :directory (make-test-store-directory)
+                   :subsystems (list (make-instance 'store-object-subsystem) gate))
+    (unwind-protect
+         (let ((store *store*))
+           (make-instance 'keyed-thing :key "k")
+           (snapshot)
+           (setf (restore-gate-armed gate) t)
+           (let ((restorer (bt:make-thread (lambda () (let ((*store* store)) (restore))))))
+             (bt:wait-on-semaphore (restore-gate-entered gate))
+             (unwind-protect (funcall function gate restorer)
+               (setf (restore-gate-armed gate) nil)
+               (bt:signal-semaphore (restore-gate-release gate))
+               (bt:join-thread restorer)))
+           (funcall after))
+      (close-store))))
+
+(defun register-restore-test (name body)
+  "Register BODY as datastore test NAME. These tests open their own store
+with a gate subsystem, so they are plain UNIT-TEST instances, like
+DEFTEST makes, and not DATASTORE-TEST-CLASS, whose RUN-TEST :AROUND
+opens a default store first."
+  (setf (gethash name *tests*)
+        (make-instance 'unit-test::unit-test :unit :datastore :name name :body body)))
+
+(register-restore-test
+ 'in-transaction-p-during-a-restore-is-true-only-in-the-restoring-thread
+ (lambda ()
+   (let (outside)
+     (call-with-paused-restore
+      (lambda (gate restorer)
+        (declare (ignore restorer))
+        (setf outside (in-transaction-p))
+        (test-equal t (restore-gate-in-transaction-inside gate))))
+     (test-equal nil outside))))
+
+(register-restore-test
+ 'with-transaction-from-another-thread-waits-for-a-restore
+ (lambda ()
+   (let (result writer)
+     (call-with-paused-restore
+      (lambda (gate restorer)
+        (declare (ignore gate restorer))
+        (setf writer (bt:make-thread
+                      (lambda ()
+                        (setf result (handler-case
+                                         (with-transaction (:waits)
+                                           (make-instance 'keyed-thing :key "made-during")
+                                           :committed)
+                                       (error (condition) condition))))))
+        (sleep 0.2)
+        (test-assert (bt:thread-alive-p writer))
+        (test-equal nil (keyed-thing-with-key "made-during")))
+      :after (lambda ()
+               (bt:join-thread writer)
+               (test-equal :committed result)
+               (test-assert (keyed-thing-with-key "made-during")))))))
+
+(register-restore-test
+ 'store-state-returns-to-opened-after-a-restore-another-thread-waited-on
+ (lambda ()
+   (let (writer)
+     (call-with-paused-restore
+      (lambda (gate restorer)
+        (declare (ignore gate restorer))
+        (setf writer (bt:make-thread
+                      (lambda () (ignore-errors (make-instance 'keyed-thing :key "made-during"))))))
+      :after (lambda ()
+               (bt:join-thread writer)
+               (test-equal :opened (bknr.datastore::store-state *store*)))))))
+
+(register-restore-test
+ 'slot-write-from-another-thread-during-a-restore-is-refused
+ (lambda ()
+   (call-with-paused-restore
+    (lambda (gate restorer)
+      (declare (ignore gate restorer))
+      (let ((thing (keyed-thing-with-key "k")))
+        (test-condition (setf (slot-value thing 'key) "changed")
+                        'bknr.datastore::persistent-slot-modified-outside-of-transaction)
+        (test-equal "k" (slot-value thing 'key)))))))
+
 (defun run-in-threads (count function)
   "Run FUNCTION with each index below COUNT on its own thread, release the
 threads together, and wait for all of them."

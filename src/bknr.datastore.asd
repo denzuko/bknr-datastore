@@ -41,6 +41,7 @@
   :description "Gherkin features for bknr.datastore, run through sunny-side."
   :depends-on (:bknr.datastore :sunny-side :fiveam :bordeaux-threads :uiop)
   :pathname "../features/step_definitions/"
-  :components ((:file "transaction-rollback-steps"))
+  :components ((:file "transaction-rollback-steps")
+               (:file "restore-concurrent-writes-steps"))
   :perform (test-op (o c)
              (symbol-call :bknr.datastore.bdd :run-bdd)))
