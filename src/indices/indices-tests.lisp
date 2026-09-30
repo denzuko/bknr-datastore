@@ -151,6 +151,48 @@
 (define-index-test skip-list-index-remove ('skip-list-index :slots '(a))
   (test-index-remove))
 
+;;; INDEX-REMOVE removes OBJECT from the index (protocol.lisp). INDEX-ADD
+;;; for SKIP-LIST-INDEX does not add an object whose key slot is unbound,
+;;; so removing one must leave the index as it is.
+
+(define-index-test skip-list-index-remove-non-holder-keeps-holder ('skip-list-index :slots '(a))
+  (let ((holder (make-instance 'indexed-object :a 3))
+        (other (make-instance 'indexed-object :a 3)))
+    (index-add *test-index* holder)
+    (index-remove *test-index* other)
+    (test-equal (index-get *test-index* 3) holder)
+    (test-equal (index-values *test-index*) (list holder))))
+
+(define-index-test skip-list-index-remove-absent-key-is-a-no-op ('skip-list-index :slots '(a))
+  (let ((holder (make-instance 'indexed-object :a 3)))
+    (index-add *test-index* holder)
+    (index-remove *test-index* (make-instance 'indexed-object :a 4))
+    (test-equal (index-values *test-index*) (list holder))))
+
+(define-index-test skip-list-index-remove-twice-is-a-no-op ('skip-list-index :slots '(a))
+  (let ((object (make-instance 'indexed-object :a 3)))
+    (index-add *test-index* object)
+    (index-remove *test-index* object)
+    (index-remove *test-index* object)
+    (test-equal (index-values *test-index*) nil)))
+
+(define-index-test skip-list-index-remove-unbound-key-is-a-no-op ('skip-list-index :slots '(a))
+  (let ((holder (make-instance 'indexed-object :a 3)))
+    (index-add *test-index* holder)
+    (index-remove *test-index* (make-instance 'indexed-object))
+    (test-equal (index-values *test-index*) (list holder))))
+
+;;; INDEX-REINITIALIZE for SKIP-LIST-INDEX: the new index takes over the
+;;; old skip list, so a redefined class keeps its entries.
+
+(define-index-test skip-list-index-reinitialize-keeps-entries ('skip-list-index :slots '(a))
+  (let ((object (make-instance 'indexed-object :a 3))
+        (new-index (index-create 'skip-list-index :slots '(a))))
+    (index-add *test-index* object)
+    (test-equal (index-reinitialize new-index *test-index*) new-index)
+    (test-equal (index-get new-index 3) object)
+    (test-equal (index-values new-index) (list object))))
+
 (define-test-class indexed-class-test-class
     ((classes :initarg :classes)))
 
