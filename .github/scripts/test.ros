@@ -38,7 +38,8 @@ return T when every test passed."
 
 (defun feature-systems ()
   "Return each Gherkin system with the packages whose RUN-BDD runs it."
-  '(("bknr.datastore/bdd" "BKNR.DATASTORE.BDD" "BKNR.DATASTORE.RESTORE-BDD")
+  '(("bknr.indices/bdd" "BKNR.INDICES.BDD")
+    ("bknr.datastore/bdd" "BKNR.DATASTORE.BDD" "BKNR.DATASTORE.RESTORE-BDD")
     ("bknr.utils/bdd" "BKNR.UTILS.BDD")))
 
 (defun feature-suites ()
