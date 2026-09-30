@@ -28,11 +28,20 @@
                  (:file "blob" :depends-on ("txn" "object" "package")))))
   :in-order-to ((test-op (test-op :bknr.datastore/test))))
 
+(defsystem :bknr.datastore/snapshot-bdd
+  :description "Gherkin feature for reloading snapshots after class changes, run through sunny-side."
+  :depends-on (:bknr.datastore :sunny-side :fiveam :uiop)
+  :pathname "../features/step_definitions/"
+  :components ((:file "snapshot-class-changes-steps"))
+  :perform (test-op (o c)
+             (symbol-call :bknr.datastore.snapshot-bdd :run-bdd)))
+
 (defsystem :bknr.datastore/test  
   :depends-on (:bknr.datastore :fiveam :cl-store :bknr.utils)
   :components ((:module "data"
                 :components
                 ((:file "encoding-test")
-                 (:file "object-tests"))))
+                 (:file "object-tests")
+                 (:file "snapshot-migration-tests" :depends-on ("object-tests")))))
   :perform (test-op (o c)
              (symbol-call :fiveam :run! :bknr.datastore)))
