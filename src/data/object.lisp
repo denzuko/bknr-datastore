@@ -526,12 +526,31 @@ the slots are read from the snapshot and ignored."
           (dolist (index (class-slot-indices class 'id))
             (index-add index object)))))))
 
+(defun initialize-slots-missing-from-layout (object slots)
+  "Set each persistent slot of OBJECT that is not in SLOTS, the slots the
+snapshot recorded, from its initform, when it has one and is unbound.
+Such a slot was added to the class after the snapshot was written; CLHS
+4.3.6 initialises added slots from their initforms. Slots the snapshot
+recorded keep their values, including an unbound one."
+  (dolist (slotd (class-slots (class-of object)))
+    (let ((name (slot-definition-name slotd)))
+      (when (and (typep slotd 'persistent-effective-slot-definition)
+                 (not (transient-slot-p slotd))
+                 (slot-definition-initfunction slotd)
+                 (not (member name slots))
+                 (not (slot-boundp object name)))
+        (setf (slot-value object name)
+              (funcall (slot-definition-initfunction slotd)))))))
+
 (defun snapshot-read-slots (stream layouts)
   (let* ((layout-id (%decode-integer stream))
          (object-id (%decode-integer stream))
-         (object (store-object-with-id object-id)))
+         (object (store-object-with-id object-id))
+         (slots (cdr (gethash layout-id layouts))))
     (restart-case
-        (%read-slots stream object (cdr (gethash layout-id layouts)))
+        (progn (%read-slots stream object slots)
+               (when object
+                 (initialize-slots-missing-from-layout object slots)))
       (skip-object-initialization ()
         :report "Skip object initialization.")
       (delete-object ()
