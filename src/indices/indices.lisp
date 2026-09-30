@@ -369,8 +369,17 @@ the hash-table entry already contains a value, an error is thrown."
   (skip-list-get key (skip-list-index-skip-list index)))
 
 (defmethod index-remove ((index skip-list-index) object)
-  (skip-list-delete (skip-list-index-skip-list index)
-		     (slot-value object (skip-list-index-slot-name index))))
+  "Remove OBJECT's entry. An object whose key slot is unbound was never
+added, so there is nothing to remove. The entry under OBJECT's key is
+removed only when it is OBJECT itself, so removing an object whose key
+another object holds, such as one rolled back after a duplicate key,
+leaves the other object's entry in place."
+  (let ((slot-name (skip-list-index-slot-name index))
+        (skip-list (skip-list-index-skip-list index)))
+    (when (slot-boundp object slot-name)
+      (let ((key (slot-value object slot-name)))
+        (when (eq object (skip-list-get key skip-list))
+          (skip-list-delete skip-list key))))))
 
 (defmethod index-keys ((index skip-list-index))
   (let ((keys))
@@ -411,14 +420,12 @@ the hash-table entry already contains a value, an error is thrown."
 
 (defmethod index-reinitialize ((new-index skip-list-index)
 			       (old-index skip-list-index))
-  "Reinitialize the slot-bound index from the old index by copying the
-internal skip-list if the skip-list order function is the same, or by
-iterating over the values of the old-list and reentering them into
-the new skip-list."
-  (let ((new-list (skip-list-index-skip-list new-index)) 
-	(old-list (skip-list-index-skip-list old-index)))
-    (setf (skip-list-index-skip-list new-list) old-list)
-    new-index))
+  "Reinitialize the slot-bound index from the old index: the new index
+takes over the old index's skip list. SKIP-LIST has no order function
+to compare, so the entries carry over unchanged."
+  (setf (skip-list-index-skip-list new-index)
+        (skip-list-index-skip-list old-index))
+  new-index)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; class skip list index
