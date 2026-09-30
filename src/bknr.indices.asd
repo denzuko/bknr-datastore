@@ -23,3 +23,11 @@
   :perform (test-op (o c)
              (symbol-call :unit-test :run-all-tests :unit :index)))
 
+
+(defsystem :bknr.indices/bdd
+  :description "Gherkin features for bknr.indices, run through sunny-side."
+  :depends-on (:bknr.indices :bknr.datastore :sunny-side :fiveam :bordeaux-threads :uiop)
+  :pathname "../features/step_definitions/"
+  :components ((:file "skip-list-index-steps"))
+  :perform (test-op (o c)
+             (symbol-call :bknr.indices.bdd :run-bdd)))
