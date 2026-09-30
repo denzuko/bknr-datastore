@@ -1,0 +1,40 @@
+{
+  "name": "CI",
+  "on": {
+    "push": {
+      "branches": [
+        "**"
+      ]
+    },
+    "pull_request": null
+  },
+  "jobs": {
+    "tests": {
+      "runs-on": "ubuntu-latest",
+      "env": {
+        "OS": "ubuntu-latest",
+        "QUICKLISP_DIST": "quicklisp",
+        "LISP": "sbcl-bin"
+      },
+      "steps": [
+        {
+          "name": "Checkout Code",
+          "uses": "actions/checkout@v4"
+        },
+        {
+          "name": "Setup Common Lisp Environment",
+          "uses": "40ants/setup-lisp@v4",
+          "with": {
+            "asdf-system": "bknr.datastore",
+            "cache": "false"
+          }
+        },
+        {
+          "name": "All test suites",
+          "run": ".github/scripts/test.ros",
+          "shell": "bash"
+        }
+      ]
+    }
+  }
+}

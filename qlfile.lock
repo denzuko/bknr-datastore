@@ -1,0 +1,8 @@
+("quicklisp" .
+ (:class qlot/source/dist:source-dist
+  :initargs (:distribution "https://beta.quicklisp.org/dist/quicklisp.txt" :%version :latest)
+  :version "2026-01-01"))
+("sunny-side" .
+ (:class qlot/source/git:source-git
+  :initargs (:remote-url "https://github.com/denzuko/sunny-side.git" :branch "develop")
+  :version "git-8cba35788b02443e5709d731192bbc6ba5934d67"))

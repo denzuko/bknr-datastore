@@ -1,0 +1,67 @@
+#!/bin/sh
+#|-*- mode:lisp -*-|#
+#|
+exec ros -- $0 "$@"
+|#
+;;;; Runs every test suite in the repository and exits 1 when any fails:
+;;;; the unit-test suites for bknr.indices and bknr.datastore, the fiveam
+;;;; suites for encoding and bknr.utils, and each Gherkin feature system
+;;;; the checkout defines.
+
+(progn (ros:ensure-asdf))
+
+(let ((src (merge-pathnames "src/" (uiop:pathname-parent-directory-pathname
+                                    (uiop:pathname-parent-directory-pathname
+                                     (uiop:pathname-directory-pathname *load-pathname*))))))
+  (let ((qlot-setup (probe-file (merge-pathnames "../.qlot/setup.lisp" src))))
+    (when qlot-setup (load qlot-setup)))
+  (push src asdf:*central-registry*))
+
+(defpackage :bknr.test-runner
+  (:use :cl))
+
+(in-package :bknr.test-runner)
+
+(defun unit-test-suite (system unit)
+  "Load SYSTEM and run its unit-test UNIT with store progress output off;
+return T when every test passed."
+  (ql:quickload system :silent t)
+  (let ((verbose (and (find-package :bknr.datastore)
+                      (find-symbol "*STORE-VERBOSE*" :bknr.datastore))))
+    (progv (and verbose (list verbose)) (list nil)
+      (uiop:symbol-call :unit-test :run-all-tests :unit unit))))
+
+(defun fiveam-suite (system suite)
+  "Load SYSTEM and run the fiveam SUITE; return T when every check passed."
+  (ql:quickload system :silent t)
+  (uiop:symbol-call :fiveam :run! suite))
+
+(defun feature-systems ()
+  "Return each Gherkin system with the packages whose RUN-BDD runs it."
+  '(("bknr.indices/bdd" "BKNR.INDICES.BDD")
+    ("bknr.datastore/bdd" "BKNR.DATASTORE.BDD" "BKNR.DATASTORE.RESTORE-BDD")
+    ("bknr.datastore/snapshot-bdd" "BKNR.DATASTORE.SNAPSHOT-BDD")
+    ("bknr.utils/bdd" "BKNR.UTILS.BDD")))
+
+(defun feature-suites ()
+  "Run the RUN-BDD of each feature system this checkout defines. Return a
+list of (name . passed)."
+  (loop for (system . packages) in (feature-systems)
+        when (asdf:find-system system nil)
+          append (progn (ql:quickload system :silent t)
+                        (loop for package in packages
+                              when (find-package package)
+                                collect (cons package (uiop:symbol-call package :run-bdd))))))
+
+(defun main (&rest argv)
+  "Run every suite, print a summary line per suite, and exit 1 when any
+failed. ARGV is unused."
+  (declare (ignore argv))
+  (let ((results (append (list (cons "bknr.indices unit" (unit-test-suite :bknr.indices/test :index))
+                               (cons "bknr.datastore unit" (unit-test-suite :bknr.datastore/test :datastore))
+                               (cons "bknr.datastore encoding" (fiveam-suite :bknr.datastore/test :bknr.datastore))
+                               (cons "bknr.utils" (fiveam-suite :bknr.utils/test :bknr.utils)))
+                         (feature-suites))))
+    (loop for (name . passed) in results
+          do (format t "~&~:[FAIL~;pass~]  ~A~%" passed name))
+    (uiop:quit (cond ((every #'cdr results) 0) (t 1)))))
